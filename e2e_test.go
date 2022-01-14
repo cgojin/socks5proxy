@@ -66,21 +66,22 @@ func TestHTTPConnect(t *testing.T) {
 			TLSHandshakeTimeout: 1 * time.Second,
 		},
 	}
-	// http.ListenAndServe
 
-	req, err := http.NewRequest("GET", "http://www.baidu.com/", nil)
-	if err != nil {
-		log.Panic(err)
+	for _, tURL := range []string{"http://www.baidu.com", "https://www.baidu.com"} {
+		req, err := http.NewRequest("GET", tURL, nil)
+		if err != nil {
+			log.Panic(err)
+		}
+		resp, err := reqClient.Do(req)
+		if err != nil {
+			log.Panic(err)
+		}
+		assert.Equal(t, resp.StatusCode, 200)
+		var respbody []byte
+		n, err := resp.Body.Read(respbody)
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Print(string(respbody[:n]))
 	}
-	resp, err := reqClient.Do(req)
-	if err != nil {
-		log.Panic(err)
-	}
-	assert.Equal(t, resp.StatusCode, 200)
-	var respbody []byte
-	n, err := resp.Body.Read(respbody)
-	if err != nil {
-		log.Panic(err)
-	}
-	log.Print(string(respbody[:n]))
 }

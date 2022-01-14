@@ -63,36 +63,34 @@ func handleProxyRequest(localClient *net.TCPConn, serverAddr *net.TCPAddr, auth 
 			return
 		}
 		localReq := buff[:n]
-		j := 0
-		z := 0
-		httpreq := []string{}
-		for i := 0; i < n; i++ {
-			if buff[i] == 32 {
-				httpreq = append(httpreq, string(buff[j:i]))
-				j = i + 1
-			}
-			if buff[i] == 10 {
-				z += 1
-			}
+
+		fields := strings.SplitN(string(localReq), " ", 3)
+		if len(fields) < 3 {
+			log.Println("bad request header")
+			return
+		}
+		method := fields[0]
+		host := fields[1]
+		hostURL, err := url.Parse(host)
+		if err != nil {
+			log.Println(err)
+			return
 		}
 
-		dstURI, err := url.ParseRequestURI(httpreq[1])
-		if err != nil {
-			log.Print(err)
-			return
-		}
-		var dstAddr string
-		var dstPort = "80"
-		dstAddrPort := strings.Split(dstURI.Host, ":")
-		if len(dstAddrPort) == 1 {
-			dstAddr = dstAddrPort[0]
-		} else if len(dstAddrPort) == 2 {
-			dstAddr = dstAddrPort[0]
-			dstPort = dstAddrPort[1]
+		var dstAddr, dstPort string
+		if hostURL.Opaque == "443" {
+			dstAddr = hostURL.Scheme
+			dstPort = "443"
 		} else {
-			log.Print("URL parse error!")
-			return
+			fields := strings.Split(hostURL.Host, ":")
+			dstAddr = fields[0]
+			if len(fields) > 1 {
+				dstPort = fields[1]
+			} else {
+				dstPort = "80"
+			}
 		}
+		log.Println(dstAddr, dstPort)
 
 		resp = []byte{0x05, 0x01, 0x00, 0x03}
 		// 域名
@@ -135,9 +133,15 @@ func handleProxyRequest(localClient *net.TCPConn, serverAddr *net.TCPAddr, auth 
 		// 转发消息
 		go func() {
 			defer wg.Done()
-			auth.Encrypt(localReq)
-			dstServer.Write(localReq)
-			// SecureCopy(localClient, dstServer, auth.Encrypt)
+
+			if method == "CONNECT" { // https
+				localClient.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+			} else { // http
+				auth.Encrypt(localReq)
+				dstServer.Write(localReq)
+			}
+
+			SecureCopy(localClient, dstServer, auth.Encrypt)
 		}()
 
 		go func() {
